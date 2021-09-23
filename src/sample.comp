@@ -1,0 +1,7 @@
+vec2 mainSound(int samp, float time) {
+	float a = sin(6.28318530718 * time * 440.0);
+	vec2 p = vec2(cos(time), sin(time)) * 2.0;
+	float ldist = distance(p, vec2(-1, 0));
+	float rdist = distance(p, vec2(1, 0));
+	return vec2(a / (ldist * ldist), a / (rdist * rdist));
+}
