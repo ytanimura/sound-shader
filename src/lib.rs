@@ -31,8 +31,10 @@ pub fn stream(code: &str) -> cpal::Stream {
 		.unwrap()
 }
 
-pub fn write_buffer(code: &str, sample_rate: u32, buffer_length: u32) -> Vec<f32> {
+pub fn write_buffer(code: &str, sample_rate: u32, duration: Duration) -> Vec<f32> {
 	let mut director = GPUDirector::new();
+	let time = duration.as_secs_f64();
+	let buffer_length = (sample_rate as f64 * time) as u32 * 2;
 	director.read_source(code);
 	director.render(sample_rate, buffer_length)
 }
@@ -67,7 +69,7 @@ fn write_sample() {
 	let buffer = write_buffer(
 		include_str!("sample.comp"),
 		spec.sample_rate,
-		spec.sample_rate * 20,
+		Duration::from_secs(10),
 	);
 	buffer.into_iter().for_each(|s| writer.write_sample(s).unwrap());
 	writer.finalize().unwrap()
