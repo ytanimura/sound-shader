@@ -12,3 +12,6 @@ cpal = "0.13.4"
 wgpu = "0.10.1"
 naga = { version = "0.6.3", features = ["glsl-in", "wgsl-out"] }
 pollster = "0.2.4"
+
+#[dev-dependencies]
+hound = "3.4.0"
