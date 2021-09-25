@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use wgpu::{util::DeviceExt, *};
 
 const SHADER_PREFIX: &'static str = "#version 450
@@ -21,16 +22,15 @@ const SHADER_SUFFIX: &'static str = "void main() {
 }";
 
 pub struct GPUDirector {
-	device: Device,
-	queue: Queue,
+	device: Arc<Device>,
+	queue: Arc<Queue>,
 	bind_group_layout: BindGroupLayout,
 	pipeline: Option<ComputePipeline>,
 	base_frame: u32,
 }
 
 impl GPUDirector {
-	pub fn new() -> Self {
-		let (device, queue) = init_device();
+	pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
 		let bind_group_layout = create_bind_group_layout(&device);
 		Self {
 			device,
@@ -39,6 +39,10 @@ impl GPUDirector {
 			pipeline: None,
 			base_frame: 0,
 		}
+	}
+	pub fn from_default_device() -> Self {
+		let (device, queue) = init_device();
+		Self::new(Arc::new(device), Arc::new(queue))
 	}
 	pub fn read_source(&mut self, code: &str) {
 		let code = SHADER_PREFIX.to_string() + code + SHADER_SUFFIX;

@@ -11,6 +11,10 @@ impl StreamFactory {
 		self.config.clone().into()
 	}
 
+	pub fn new(device: Device, config: SupportedStreamConfig) -> Self {
+		Self { device, config }
+	}
+
 	pub fn default_factory() -> Result<StreamFactory, String> {
 		let host = cpal::default_host();
 		let device = host
@@ -25,10 +29,7 @@ impl StreamFactory {
 				config.channels()
 			));
 		}
-		Ok(StreamFactory {
-			device,
-			config: config,
-		})
+		Ok(Self { device, config })
 	}
 
 	pub fn create_stream(
@@ -70,7 +71,7 @@ fn beep() {
 	let sample_rate = sf.config().sample_rate.0;
 	let mut sample_clock = 0;
 	let routin = move |len: usize| -> Vec<f32> {
-		(0..len/2)
+		(0..len / 2)
 			.flat_map(|_| {
 				sample_clock = (sample_clock + 1) % sample_rate;
 				let r = sample_clock as f32 / sample_rate as f32;
