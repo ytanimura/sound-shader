@@ -1,3 +1,4 @@
+use crate::hound_wrapper::WavTextureMaker;
 use std::sync::Arc;
 use wgpu::{util::DeviceExt, *};
 
@@ -5,76 +6,67 @@ const SHADER_PREFIX: &'static str = "#version 450
 layout(local_size_x = 1) in;
 
 layout(set = 0, binding = 0) buffer OutputStorage {
-	float[] output;
+	vec2[] output;
 };
 
 layout(set = 0, binding = 1) uniform DeviceInfo {
 	uint sample_rate;
 	uint base_frame;
-};";
+};
+";
 
-const SHADER_SUFFIX: &'static str = "void main() {
+const SHADER_SUFFIX: &'static str = "
+void main() {
 	uint idx = gl_GlobalInvocationID.x;
 	uint frame = base_frame + idx;
-	vec2 c = mainSound(int(sample_rate), float(frame) / float(sample_rate));
-	output[idx * 2] = c.x;
-	output[idx * 2 + 1] = c.y;
-}";
+	output[idx] = mainSound(int(sample_rate), float(frame) / float(sample_rate));
+}
+";
 
 pub struct GPUDirector {
 	device: Arc<Device>,
 	queue: Arc<Queue>,
-	bind_group_layout: BindGroupLayout,
-	pipeline: Option<ComputePipeline>,
+	bind_group_layouts: Vec<BindGroupLayout>,
+	pipeline: ComputePipeline,
 	base_frame: u32,
+	sound_storages: Vec<WavTextureMaker>,
 }
 
 impl GPUDirector {
-	pub fn new(device: Arc<Device>, queue: Arc<Queue>) -> Self {
-		let bind_group_layout = create_bind_group_layout(&device);
+	pub fn new(
+		device: Arc<Device>,
+		queue: Arc<Queue>,
+		shader_source: &str,
+		sound_storages: Vec<WavTextureMaker>,
+	) -> Self {
+		let bind_group_layouts = create_bind_group_layouts(&device, sound_storages.len());
+		let pipeline = read_source(&device, &bind_group_layouts, shader_source, &sound_storages);
 		Self {
 			device,
 			queue,
-			bind_group_layout,
-			pipeline: None,
+			bind_group_layouts,
+			pipeline,
 			base_frame: 0,
+			sound_storages,
 		}
 	}
-	pub fn from_default_device() -> Self {
+	pub fn from_default_device(shader_source: &str, sound_storages: Vec<WavTextureMaker>) -> Self {
 		let (device, queue) = init_device();
-		Self::new(Arc::new(device), Arc::new(queue))
-	}
-	pub fn read_source(&mut self, code: &str) {
-		let code = SHADER_PREFIX.to_string() + code + SHADER_SUFFIX;
-		let wgsl = glsl_to_wgsl(&code);
-		let module = self.device.create_shader_module(&ShaderModuleDescriptor {
-			label: None,
-			source: ShaderSource::Wgsl(wgsl.into()),
-		});
-		let pipeline_layout = self
-			.device
-			.create_pipeline_layout(&PipelineLayoutDescriptor {
-				label: None,
-				bind_group_layouts: &[&self.bind_group_layout],
-				push_constant_ranges: &[],
-			});
-		let pipeline = self
-			.device
-			.create_compute_pipeline(&ComputePipelineDescriptor {
-				label: None,
-				layout: Some(&pipeline_layout),
-				module: &module,
-				entry_point: "main",
-			});
-		self.pipeline = Some(pipeline);
+		Self::new(
+			Arc::new(device),
+			Arc::new(queue),
+			shader_source,
+			sound_storages,
+		)
 	}
 	pub fn render(&mut self, sample_rate: u32, buffer_length: u32) -> Vec<f32> {
 		let Self {
 			ref device,
 			ref queue,
-			ref bind_group_layout,
+			ref bind_group_layouts,
 			ref pipeline,
 			ref mut base_frame,
+			ref mut sound_storages,
 		} = self;
 		let (storage, staging) = create_output_buffers(&self.device, buffer_length as u64);
 		let device_info = device.create_buffer_init(&util::BufferInitDescriptor {
@@ -83,9 +75,9 @@ impl GPUDirector {
 			usage: BufferUsages::UNIFORM,
 		});
 		*base_frame += buffer_length / 2;
-		let bind_group = device.create_bind_group(&BindGroupDescriptor {
+		let bind_group0 = device.create_bind_group(&BindGroupDescriptor {
 			label: None,
-			layout: bind_group_layout,
+			layout: &bind_group_layouts[0],
 			entries: &[
 				BindGroupEntry {
 					binding: 0,
@@ -97,11 +89,19 @@ impl GPUDirector {
 				},
 			],
 		});
+		let sound_buffers = sound_storage_buffers(device, sound_storages, buffer_length as usize, sample_rate);
+		let entries = buffers_to_entries(&sound_buffers);
+		let bind_group1 = device.create_bind_group(&BindGroupDescriptor {
+			label: None,
+			layout: &bind_group_layouts[1],
+			entries: &entries,
+		});
 		let mut encoder = device.create_command_encoder(&Default::default());
 		{
 			let mut cpass = encoder.begin_compute_pass(&Default::default());
-			cpass.set_pipeline(pipeline.as_ref().expect("pipeline not initialized"));
-			cpass.set_bind_group(0, &bind_group, &[]);
+			cpass.set_pipeline(pipeline);
+			cpass.set_bind_group(0, &bind_group0, &[]);
+			cpass.set_bind_group(1, &bind_group1, &[]);
 			cpass.insert_debug_marker("rendering sound");
 			cpass.dispatch(buffer_length / 2, 1, 1);
 		}
@@ -140,8 +140,8 @@ fn init_device() -> (Device, Queue) {
 	})
 }
 
-fn create_bind_group_layout(device: &Device) -> BindGroupLayout {
-	device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+fn create_bind_group_layouts(device: &Device, len: usize) -> Vec<BindGroupLayout> {
+	let bgl0 = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
 		label: None,
 		entries: &[
 			BindGroupLayoutEntry {
@@ -165,6 +165,43 @@ fn create_bind_group_layout(device: &Device) -> BindGroupLayout {
 				count: None,
 			},
 		],
+	});
+	let bgl1 = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+		label: None,
+		entries: &sound_storage_bind_group_layout_entries(len as u32),
+	});
+	vec![bgl0, bgl1]
+}
+
+pub fn read_source(
+	device: &Device,
+	bind_group_layouts: &[BindGroupLayout],
+	code: &str,
+	resources: &Vec<WavTextureMaker>,
+) -> ComputePipeline {
+	let mut code_buf = SHADER_PREFIX.to_string();
+	resources.iter().enumerate().for_each(|(idx, wav)| {
+		code_buf += &sound_storage_bindingshader(idx, wav.spec.channels as u32)
+	});
+	resources.iter().enumerate().for_each(|(idx, wav)| {
+		code_buf += &sound_storage_fetchfunction(idx, wav.spec.channels as u32)
+	});
+	code_buf = code_buf + code + SHADER_SUFFIX;
+	let wgsl = glsl_to_wgsl(&code_buf);
+	let module = device.create_shader_module(&ShaderModuleDescriptor {
+		label: None,
+		source: ShaderSource::Wgsl(wgsl.into()),
+	});
+	let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+		label: None,
+		bind_group_layouts: &bind_group_layouts.iter().collect::<Vec<_>>(),
+		push_constant_ranges: &[],
+	});
+	device.create_compute_pipeline(&ComputePipelineDescriptor {
+		label: None,
+		layout: Some(&pipeline_layout),
+		module: &module,
+		entry_point: "main",
 	})
 }
 
@@ -209,4 +246,99 @@ fn create_output_buffers(device: &Device, len: u64) -> (Buffer, Buffer) {
 		mapped_at_creation: false,
 	});
 	(storage, staging)
+}
+
+fn sound_storage_bindingshader(idx: usize, channels: u32) -> String {
+	format!(
+		"layout(set = 1, binding = {}) buffer AudioTexture{} {{
+	vec{}[] audio_texture{1};
+}};
+layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
+	uint sample_rate{1};
+	uint channels{1};
+}}
+;
+	",
+		idx * 2,
+		idx,
+		channels,
+		idx * 2 + 1
+	)
+}
+
+fn sound_storage_fetchfunction(idx: usize, channels: u32) -> String {
+	format!("vec{} soundTexture{}(float time) {{
+	float t = time - float(base_frame) / float(sample_rate);
+	uint idx = uint(float(sample_rate{1}) * t);
+	return audio_texture{1}[idx];
+}}
+", channels, idx)
+}
+
+fn sound_storage_bind_group_layout_entries(len: u32) -> Vec<BindGroupLayoutEntry> {
+	(0..len)
+		.flat_map(|i| {
+			vec![
+				BindGroupLayoutEntry {
+					binding: i * 2,
+					visibility: ShaderStages::COMPUTE,
+					ty: BindingType::Buffer {
+						ty: BufferBindingType::Storage { read_only: false },
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				BindGroupLayoutEntry {
+					binding: i * 2 + 1,
+					visibility: ShaderStages::COMPUTE,
+					ty: BindingType::Buffer {
+						ty: BufferBindingType::Uniform,
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+			]
+		})
+		.collect()
+}
+
+fn sound_storage_buffers(device: &Device, storages: &mut Vec<WavTextureMaker>, buffer_length: usize, device_sample_rate: u32) -> Vec<Buffer> {
+	storages
+		.iter_mut()
+		.flat_map(|storage| {
+			let hound::WavSpec {
+				sample_rate,
+				channels,
+				..
+			} = storage.spec;
+			let buffer_length = (buffer_length as f64 * sample_rate as f64 / device_sample_rate as f64) as usize;
+			let vec = storage.next_buffer(buffer_length);
+			let storage_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
+				label: None,
+				contents: bytemuck::cast_slice(&vec),
+				usage: BufferUsages::STORAGE,
+			});
+			let uniform_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
+				label: None,
+				contents: bytemuck::cast_slice(&[sample_rate, channels as u32]),
+				usage: BufferUsages::UNIFORM,
+			});
+			vec![storage_buffer, uniform_buffer]
+		})
+		.collect()
+}
+
+fn buffers_to_entries(buffers: &Vec<Buffer>) -> Vec<BindGroupEntry> {
+	buffers
+		.iter()
+		.enumerate()
+		.flat_map(|(i, buffer)| {
+			vec![BindGroupEntry {
+				binding: i as u32,
+				resource: buffer.as_entire_binding(),
+			}]
+		})
+		.collect()
 }

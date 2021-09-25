@@ -1,6 +1,3 @@
-extern crate cpal;
-extern crate wgpu;
-
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -8,6 +5,8 @@ mod cpal_wrapper;
 use cpal_wrapper::StreamFactory;
 mod wgpu_wrapper;
 use wgpu_wrapper::GPUDirector;
+mod hound_wrapper;
+use hound_wrapper::WavTextureMaker;
 
 /// Options for `cpal` audio device.
 pub enum AudioDevice {
@@ -36,13 +35,14 @@ pub enum GpuDevice {
 }
 
 /// Configuation for shader stream
-pub struct ShaderStreamDescriptor<'a> {
+pub struct ShaderStreamDescriptor<'a, P: AsRef<std::path::Path> = &'static str> {
 	/// Options for `cpal` audio device.
 	pub audio_device: AudioDevice,
 	/// Options for `wgpu` GPU device.
 	pub gpu_device: GpuDevice,
 	/// Sound shader code
 	pub shader_source: &'a str,
+	pub sound_storages: Vec<P>,
 }
 
 impl<'a> Default for ShaderStreamDescriptor<'a> {
@@ -50,7 +50,8 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 		Self {
 			audio_device: AudioDevice::Default,
 			gpu_device: GpuDevice::Default,
-			shader_source: ""
+			shader_source: "",
+			sound_storages: Vec::new(),
 		}
 	}
 }
@@ -62,25 +63,29 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 		AudioDevice::Custum { device, config } => StreamFactory::new(device, config),
 	};
 	let config = sf.config();
+	let sound_storages = desc
+		.sound_storages
+		.into_iter()
+		.map(|path| WavTextureMaker::try_new(path).unwrap())
+		.collect();
 	let mut director = match desc.gpu_device {
-		GpuDevice::Default => GPUDirector::from_default_device(),
-		GpuDevice::Custum { device, queue } => GPUDirector::new(device, queue),
+		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
+		GpuDevice::Custum { device, queue } => {
+			GPUDirector::new(device, queue, desc.shader_source, sound_storages)
+		}
 	};
-	director.read_source(desc.shader_source);
 
 	let sample_rate = config.sample_rate.0 as u32;
 	let buffer0 = Arc::new(Mutex::new(director.render(sample_rate, sample_rate * 2)));
 	let buffer1 = Arc::clone(&buffer0);
 
-	std::thread::spawn(move || {
-		loop {
-			let len = buffer0.lock().unwrap().len() as u32;
-			if len < sample_rate {
-				let vec = director.render(sample_rate, sample_rate * 2);
-				buffer0.lock().unwrap().extend(vec);
-			}
-			std::thread::sleep(Duration::from_millis(200));
+	std::thread::spawn(move || loop {
+		let len = buffer0.lock().unwrap().len() as u32;
+		if len < sample_rate {
+			let vec = director.render(sample_rate, sample_rate * 2);
+			buffer0.lock().unwrap().extend(vec);
 		}
+		std::thread::sleep(Duration::from_millis(200));
 	});
 
 	sf.create_stream(move |len| match buffer1.lock() {
@@ -111,14 +116,24 @@ pub fn play(desc: ShaderStreamDescriptor, duration: Duration) {
 }
 
 /// Returns buffer for play the shader. `ShaderStreamDescriptor::audio_device` is ignored.
-pub fn write_buffer(desc: ShaderStreamDescriptor, sample_rate: u32, duration: Duration) -> Vec<f32> {
+pub fn write_buffer(
+	desc: ShaderStreamDescriptor,
+	sample_rate: u32,
+	duration: Duration,
+) -> Vec<f32> {
+	let sound_storages = desc
+		.sound_storages
+		.into_iter()
+		.map(|path| WavTextureMaker::try_new(path).unwrap())
+		.collect();
 	let mut director = match desc.gpu_device {
-		GpuDevice::Default => GPUDirector::from_default_device(),
-		GpuDevice::Custum { device, queue } => GPUDirector::new(device, queue),
+		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
+		GpuDevice::Custum { device, queue } => {
+			GPUDirector::new(device, queue, desc.shader_source, sound_storages)
+		}
 	};
 	let time = duration.as_secs_f64();
 	let buffer_length = (sample_rate as f64 * time) as u32 * 2;
-	director.read_source(desc.shader_source);
 	director.render(sample_rate, buffer_length)
 }
 
@@ -133,6 +148,7 @@ fn play_sample() {
 
 #[test]
 fn sample_stream() {
+	env_logger::init();
 	use cpal::traits::StreamTrait;
 	let desc = ShaderStreamDescriptor {
 		shader_source: include_str!("sample.comp"),

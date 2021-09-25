@@ -1,0 +1,3 @@
+vec2 mainSound(int _samp, float time) {
+	return soundTexture0(time) + soundTexture1(time);
+}
