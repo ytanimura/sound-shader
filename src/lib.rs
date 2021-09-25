@@ -5,30 +5,44 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod cpal_wrapper;
-pub use cpal_wrapper::StreamFactory;
-pub mod wgpu_wrapper;
-pub use wgpu_wrapper::GPUDirector;
+use cpal_wrapper::StreamFactory;
+mod wgpu_wrapper;
+use wgpu_wrapper::GPUDirector;
 
+/// Options for `cpal` audio device.
 pub enum AudioDevice {
+	/// Loads the default audio device internally
 	Default,
+	/// Set the audio device manually
 	Custum {
+		/// Audio device
 		device: cpal::Device,
+		/// Stream configuation. `channels` must be 2.
 		config: cpal::SupportedStreamConfig,
 	},
 }
 
+/// Options for `wgpu` GPU device.
 pub enum GpuDevice {
+	/// Loads the default GPU device internally
 	Default,
+	/// Set the GPU device manually
 	Custum {
+		/// GPU device
 		device: Arc<wgpu::Device>,
+		/// GPU device queue
 		queue: Arc<wgpu::Queue>,
 	},
 }
 
+/// Configuation for shader stream
 pub struct ShaderStreamDescriptor<'a> {
-	audio_device: AudioDevice,
-	gpu_device: GpuDevice,
-	shader_source: &'a str,
+	/// Options for `cpal` audio device.
+	pub audio_device: AudioDevice,
+	/// Options for `wgpu` GPU device.
+	pub gpu_device: GpuDevice,
+	/// Sound shader code
+	pub shader_source: &'a str,
 }
 
 impl<'a> Default for ShaderStreamDescriptor<'a> {
@@ -41,6 +55,7 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 	}
 }
 
+/// Creates output audio stream
 pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let sf = match desc.audio_device {
 		AudioDevice::Default => StreamFactory::default_factory().unwrap(),
@@ -87,6 +102,7 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	.unwrap()
 }
 
+/// Creates output audio stream and play it for `duration`.
 pub fn play(desc: ShaderStreamDescriptor, duration: Duration) {
 	use cpal::traits::StreamTrait;
 	let stream = stream(desc);
@@ -94,11 +110,15 @@ pub fn play(desc: ShaderStreamDescriptor, duration: Duration) {
 	std::thread::sleep(duration);
 }
 
-pub fn write_buffer(code: &str, sample_rate: u32, duration: Duration) -> Vec<f32> {
-	let mut director = GPUDirector::from_default_device();
+/// Returns buffer for play the shader. `ShaderStreamDescriptor::audio_device` is ignored.
+pub fn write_buffer(desc: ShaderStreamDescriptor, sample_rate: u32, duration: Duration) -> Vec<f32> {
+	let mut director = match desc.gpu_device {
+		GpuDevice::Default => GPUDirector::from_default_device(),
+		GpuDevice::Custum { device, queue } => GPUDirector::new(device, queue),
+	};
 	let time = duration.as_secs_f64();
 	let buffer_length = (sample_rate as f64 * time) as u32 * 2;
-	director.read_source(code);
+	director.read_source(desc.shader_source);
 	director.render(sample_rate, buffer_length)
 }
 
@@ -138,7 +158,10 @@ fn write_sample() {
 	};
 	let mut writer = WavWriter::create("sample.wav", spec).unwrap();
 	let buffer = write_buffer(
-		include_str!("sample.comp"),
+		ShaderStreamDescriptor {
+			shader_source: include_str!("sample.comp"),
+			..Default::default()
+		},
 		spec.sample_rate,
 		Duration::from_secs(10),
 	);
