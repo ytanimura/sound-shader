@@ -67,6 +67,8 @@ impl WavTextureMaker {
 		self.spec
 	}
 
+	pub fn buffer_len(&self) -> usize { self.buffer.len() }
+
 	pub fn reserve(&mut self, len: usize) {
 		(0..len).for_each(|_| {
 			let a = match self.samples.next() {

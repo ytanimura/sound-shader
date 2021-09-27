@@ -332,6 +332,9 @@ fn sound_storage_buffers(
 			} = storage.spec();
 			let buffer_length =
 				(buffer_length as f64 * sample_rate as f64 / device_sample_rate as f64) as usize;
+			if storage.buffer_len() < buffer_length {
+				println!("not enough textures!");
+			}
 			let vec = storage.next_buffer(buffer_length);
 			let storage_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
 				label: None,

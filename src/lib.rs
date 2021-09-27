@@ -66,8 +66,14 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let sound_storages = desc
 		.sound_storages
 		.into_iter()
-		.map(|path| Arc::new(Mutex::new(WavTextureMaker::try_new(path).unwrap())))
-		.collect();
+		.map(|path| {
+			let mut maker = WavTextureMaker::try_new(path).unwrap();
+			let spec = maker.spec();
+			maker.reserve(spec.sample_rate as usize * spec.channels as usize * 3);
+			Arc::new(Mutex::new(maker))
+		})
+		.collect::<Vec<_>>();
+	let sound_storages0 = sound_storages.clone();
 	let mut director = match desc.gpu_device {
 		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
 		GpuDevice::Custum { device, queue } => {
@@ -78,6 +84,19 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let sample_rate = config.sample_rate.0 as u32;
 	let buffer0 = Arc::new(Mutex::new(director.render(sample_rate, sample_rate * 2)));
 	let buffer1 = Arc::clone(&buffer0);
+
+	std::thread::spawn(move || loop {
+		sound_storages0.iter().for_each(|wav| {
+			let mut wav = wav.lock().unwrap();
+			let spec = wav.spec();
+			let unit_len = spec.sample_rate as usize * spec.channels as usize;
+			let current_len = wav.buffer_len();
+			if current_len < unit_len * 2 {
+				wav.reserve(unit_len * 3 - current_len);
+			}
+			std::thread::sleep(Duration::from_millis(100));
+		})
+	});
 
 	std::thread::spawn(move || loop {
 		let len = buffer0.lock().unwrap().len() as u32;
