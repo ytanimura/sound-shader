@@ -38,7 +38,8 @@ impl ExactSizeIterator for WrapperSamples {}
 
 pub struct WavTextureMaker {
 	samples: WrapperSamples,
-	pub spec: WavSpec,
+	buffer: Vec<f32>,
+	spec: WavSpec,
 }
 
 impl WavTextureMaker {
@@ -55,37 +56,34 @@ impl WavTextureMaker {
 				}
 			}
 		};
-		Ok(Self { samples, spec })
+		Ok(Self {
+			samples,
+			spec,
+			buffer: Vec::new(),
+		})
+	}
+
+	pub fn spec(&self) -> WavSpec {
+		self.spec
+	}
+
+	pub fn reserve(&mut self, len: usize) {
+		(0..len).for_each(|_| {
+			let a = match self.samples.next() {
+				Some(val) => val,
+				None => 0.0,
+			};
+			self.buffer.push(a);
+		})
 	}
 
 	pub fn next_buffer(&mut self, len: usize) -> Vec<f32> {
-		(0..len)
-			.map(|_| match self.samples.next() {
-				Some(val) => val,
-				None => 0.0,
-			})
-			.collect()
-	}
-}
-
-impl Iterator for WavTextureMaker {
-	type Item = Vec<f32>;
-	fn next(&mut self) -> Option<Vec<f32>> {
-		let Self {
-			ref mut samples,
-			spec,
-		} = self;
-		if samples.len() == 0 {
-			None
-		} else {
-			Some(
-				(0..spec.sample_rate * spec.channels as u32)
-					.map(|_| match samples.next() {
-						Some(val) => val,
-						None => 0.0,
-					})
-					.collect(),
-			)
+		if self.buffer.len() < len {
+			self.reserve(len - self.buffer.len());
 		}
+		let vec = self.buffer.split_off(len);
+		let res = self.buffer.clone();
+		self.buffer = vec;
+		res
 	}
 }

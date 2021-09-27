@@ -66,7 +66,7 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let sound_storages = desc
 		.sound_storages
 		.into_iter()
-		.map(|path| WavTextureMaker::try_new(path).unwrap())
+		.map(|path| Arc::new(Mutex::new(WavTextureMaker::try_new(path).unwrap())))
 		.collect();
 	let mut director = match desc.gpu_device {
 		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
@@ -124,7 +124,7 @@ pub fn write_buffer(
 	let sound_storages = desc
 		.sound_storages
 		.into_iter()
-		.map(|path| WavTextureMaker::try_new(path).unwrap())
+		.map(|path| Arc::new(Mutex::new(WavTextureMaker::try_new(path).unwrap())))
 		.collect();
 	let mut director = match desc.gpu_device {
 		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
