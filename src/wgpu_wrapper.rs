@@ -93,7 +93,7 @@ impl GPUDirector {
 			],
 		});
 		let sound_buffers =
-			sound_storage_buffers(device, sound_storages, buffer_length as usize, sample_rate);
+			sound_storage_buffers(device, sound_storages, buffer_length as usize / 2, sample_rate);
 		let entries = buffers_to_entries(&sound_buffers);
 		let bind_group1 = device.create_bind_group(&BindGroupDescriptor {
 			label: None,
@@ -184,16 +184,8 @@ pub fn read_source(
 	resources: &Vec<Arc<Mutex<WavTextureMaker>>>,
 ) -> ComputePipeline {
 	let mut code_buf = SHADER_PREFIX.to_string();
-	let specs = resources
-		.iter()
-		.map(|wav| wav.lock().unwrap().spec())
-		.collect::<Vec<_>>();
-	specs.iter().enumerate().for_each(|(idx, spec)| {
-		code_buf += &sound_storage_bindingshader(idx, spec.channels as u32)
-	});
-	specs.iter().enumerate().for_each(|(idx, spec)| {
-		code_buf += &sound_storage_fetchfunction(idx, spec.channels as u32)
-	});
+	(0..resources.len()).for_each(|idx| code_buf += &sound_storage_bindingshader(idx));
+	(0..resources.len()).for_each(|idx| code_buf += &sound_storage_fetchfunction(idx));
 	code_buf = code_buf + code + SHADER_SUFFIX;
 	let wgsl = glsl_to_wgsl(&code_buf);
 	let module = device.create_shader_module(&ShaderModuleDescriptor {
@@ -256,10 +248,10 @@ fn create_output_buffers(device: &Device, len: u64) -> (Buffer, Buffer) {
 	(storage, staging)
 }
 
-fn sound_storage_bindingshader(idx: usize, channels: u32) -> String {
+fn sound_storage_bindingshader(idx: usize) -> String {
 	format!(
 		"layout(set = 1, binding = {}) buffer AudioTexture{} {{
-	vec{}[] audio_texture{1};
+	vec4[] audio_texture{1};
 }};
 layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 	uint sample_rate{1};
@@ -269,20 +261,25 @@ layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 	",
 		idx * 2,
 		idx,
-		channels,
 		idx * 2 + 1
 	)
 }
 
-fn sound_storage_fetchfunction(idx: usize, channels: u32) -> String {
+fn sound_storage_fetchfunction(idx: usize) -> String {
 	format!(
-		"vec{} soundTexture{}(float time) {{
+		"vec2 soundTexture{}(float time) {{
 	float t = time - float(base_frame) / float(sample_rate);
-	uint idx = uint(float(sample_rate{1}) * t);
-	return audio_texture{1}[idx];
+	uint idx = uint(float(sample_rate{0}) * t);
+	return audio_texture{0}[idx].xy;
+}}
+vec2 soundDFTFetch{0}(float time, uint idx) {{
+	float t = time - float(base_frame) / float(sample_rate);
+	uint base_t = uint(t * 10.0);
+	uint base_idx = sample_rate{0} * base_t / 10;
+	return audio_texture{0}[base_idx + idx].zw;
 }}
 ",
-		channels, idx
+		idx
 	)
 }
 

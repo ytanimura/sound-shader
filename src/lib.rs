@@ -94,8 +94,8 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 			if current_len < unit_len * 2 {
 				wav.reserve(unit_len * 3 - current_len);
 			}
-			std::thread::sleep(Duration::from_millis(100));
-		})
+		});
+		std::thread::sleep(Duration::from_millis(100));
 	});
 
 	std::thread::spawn(move || loop {
@@ -114,7 +114,7 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 		}
 		Ok(mut buffer) => {
 			if buffer.len() < len {
-				eprintln!("buffer length is not enough");
+				eprintln!("buffer length is not enough. buffer length: {} required: {}", buffer.len(), len);
 				buffer.resize(len, 0.0);
 			}
 			let latter = buffer.split_off(len);
