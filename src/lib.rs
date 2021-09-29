@@ -42,7 +42,10 @@ pub struct ShaderStreamDescriptor<'a, P: AsRef<std::path::Path> = &'static str> 
 	pub gpu_device: GpuDevice,
 	/// Sound shader code
 	pub shader_source: &'a str,
-	pub sound_storages: Vec<P>,
+	/// File names of sound storages
+	pub sound_storages: &'a [P],
+	/// Buffer for recording result
+	pub record_buffer: Option<Arc<Mutex<Vec<f32>>>>,
 }
 
 impl<'a> Default for ShaderStreamDescriptor<'a> {
@@ -51,13 +54,14 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 			audio_device: AudioDevice::Default,
 			gpu_device: GpuDevice::Default,
 			shader_source: "",
-			sound_storages: Vec::new(),
+			sound_storages: &[],
+			record_buffer: None,
 		}
 	}
 }
 
 /// Creates output audio stream
-pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
+pub fn stream(mut desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let sf = match desc.audio_device {
 		AudioDevice::Default => StreamFactory::default_factory().unwrap(),
 		AudioDevice::Custum { device, config } => StreamFactory::new(device, config),
@@ -69,7 +73,7 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 		.map(|path| {
 			let mut maker = WavTextureMaker::try_new(path).unwrap();
 			let spec = maker.spec();
-			maker.reserve(spec.sample_rate as usize * spec.channels as usize * 3);
+			maker.reserve(spec.sample_rate as usize * 3);
 			Arc::new(Mutex::new(maker))
 		})
 		.collect::<Vec<_>>();
@@ -85,18 +89,20 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 	let buffer0 = Arc::new(Mutex::new(director.render(sample_rate, sample_rate * 2)));
 	let buffer1 = Arc::clone(&buffer0);
 
-	std::thread::spawn(move || loop {
-		sound_storages0.iter().for_each(|wav| {
-			let mut wav = wav.lock().unwrap();
-			let spec = wav.spec();
-			let unit_len = spec.sample_rate as usize * spec.channels as usize;
-			let current_len = wav.buffer_len();
-			if current_len < unit_len * 2 {
-				wav.reserve(unit_len * 3 - current_len);
-			}
+	if !sound_storages0.is_empty() {
+		std::thread::spawn(move || loop {
+			sound_storages0.iter().for_each(|wav| {
+				let mut wav = wav.lock().unwrap();
+				let spec = wav.spec();
+				let unit_len = spec.sample_rate as usize;
+				let current_len = wav.buffer_len();
+				if current_len < unit_len * 2 {
+					wav.reserve(unit_len * 3 - current_len);
+				}
+			});
+			std::thread::sleep(Duration::from_millis(100));
 		});
-		std::thread::sleep(Duration::from_millis(100));
-	});
+	}
 
 	std::thread::spawn(move || loop {
 		let len = buffer0.lock().unwrap().len() as u32;
@@ -107,6 +113,7 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 		std::thread::sleep(Duration::from_millis(200));
 	});
 
+	let record = desc.record_buffer.take();
 	sf.create_stream(move |len| match buffer1.lock() {
 		Err(e) => {
 			eprintln!("{}", e);
@@ -114,11 +121,21 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 		}
 		Ok(mut buffer) => {
 			if buffer.len() < len {
-				eprintln!("buffer length is not enough. buffer length: {} required: {}", buffer.len(), len);
+				eprintln!(
+					"buffer length is not enough.\nbuffer length: {}\nrequired: {}",
+					buffer.len(),
+					len
+				);
 				buffer.resize(len, 0.0);
 			}
 			let latter = buffer.split_off(len);
 			let front = buffer.clone();
+			if let Some(record) = record.as_ref() {
+				match record.try_lock() {
+					Ok(mut record) => record.extend(&front),
+					Err(_) => eprintln!("record buffer is locked"),
+				}
+			}
 			*buffer = latter;
 			front
 		}
@@ -127,11 +144,12 @@ pub fn stream(desc: ShaderStreamDescriptor) -> cpal::Stream {
 }
 
 /// Creates output audio stream and play it for `duration`.
-pub fn play(desc: ShaderStreamDescriptor, duration: Duration) {
+pub fn play(desc: ShaderStreamDescriptor, duration: Duration) -> Result<(), String> {
 	use cpal::traits::StreamTrait;
 	let stream = stream(desc);
-	stream.play().unwrap();
+	stream.play().map_err(|e| format!("{}", e))?;
 	std::thread::sleep(duration);
+	Ok(())
 }
 
 /// Returns buffer for play the shader. `ShaderStreamDescriptor::audio_device` is ignored.
@@ -143,7 +161,13 @@ pub fn write_buffer(
 	let sound_storages = desc
 		.sound_storages
 		.into_iter()
-		.map(|path| Arc::new(Mutex::new(WavTextureMaker::try_new(path).unwrap())))
+		.map(|path| {
+			let mut wav = WavTextureMaker::try_new(path).unwrap();
+			let spec = wav.spec();
+			let len = spec.sample_rate as usize * spec.channels as usize * (duration.as_secs() as usize + 1);
+			wav.reserve(len);
+			Arc::new(Mutex::new(wav))
+		})
 		.collect();
 	let mut director = match desc.gpu_device {
 		GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
@@ -154,54 +178,4 @@ pub fn write_buffer(
 	let time = duration.as_secs_f64();
 	let buffer_length = (sample_rate as f64 * time) as u32 * 2;
 	director.render(sample_rate, buffer_length)
-}
-
-#[test]
-fn play_sample() {
-	let desc = ShaderStreamDescriptor {
-		shader_source: include_str!("sample.comp"),
-		..Default::default()
-	};
-	play(desc, Duration::from_millis(10000))
-}
-
-#[test]
-fn sample_stream() {
-	env_logger::init();
-	use cpal::traits::StreamTrait;
-	let desc = ShaderStreamDescriptor {
-		shader_source: include_str!("sample.comp"),
-		..Default::default()
-	};
-	let stream = stream(desc);
-	stream.play().unwrap();
-	std::thread::sleep(Duration::from_millis(1000));
-	stream.pause().unwrap();
-	std::thread::sleep(Duration::from_millis(1000));
-	stream.play().unwrap();
-	std::thread::sleep(Duration::from_millis(1000));
-}
-
-#[test]
-fn write_sample() {
-	use hound::*;
-	let spec = WavSpec {
-		channels: 2,
-		sample_rate: 44100,
-		bits_per_sample: 32,
-		sample_format: SampleFormat::Float,
-	};
-	let mut writer = WavWriter::create("sample.wav", spec).unwrap();
-	let buffer = write_buffer(
-		ShaderStreamDescriptor {
-			shader_source: include_str!("sample.comp"),
-			..Default::default()
-		},
-		spec.sample_rate,
-		Duration::from_secs(10),
-	);
-	buffer
-		.into_iter()
-		.for_each(|s| writer.write_sample(s).unwrap());
-	writer.finalize().unwrap()
 }

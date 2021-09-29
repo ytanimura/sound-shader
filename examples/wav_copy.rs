@@ -6,10 +6,10 @@ fn main() {
 	env_logger::init();
 	let desc = ShaderStreamDescriptor {
 		shader_source: include_str!("wav-play.comp"),
-		sound_storages: vec!["examples/vocal.wav", "examples/inst.wav"],
+		sound_storages: &["examples/vocal.wav", "examples/inst.wav"],
 		..Default::default()
 	};
-	let buffer = sound_shader::write_buffer(desc, 44100, Duration::from_secs(120));
+	let buffer = sound_shader::write_buffer(desc, 44100, Duration::from_secs(100));
 	let spec = WavSpec {
 		channels: 2,
 		sample_rate: 44100,

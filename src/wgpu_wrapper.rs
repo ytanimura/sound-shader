@@ -256,8 +256,7 @@ fn sound_storage_bindingshader(idx: usize) -> String {
 layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 	uint sample_rate{1};
 	uint channels{1};
-}}
-;
+}};
 	",
 		idx * 2,
 		idx,

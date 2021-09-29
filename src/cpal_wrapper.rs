@@ -51,11 +51,10 @@ impl StreamFactory {
 			.build_output_stream(
 				&self.config.clone().into(),
 				move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
-					let vec = routin(output.len());
-					output
-						.iter_mut()
-						.zip(vec)
-						.for_each(|(a, b)| *a = cpal::Sample::from(&b))
+					routin(output.len())
+						.into_iter()
+						.zip(output)
+						.for_each(|(b, a)| *a = cpal::Sample::from(&b))
 				},
 				|err| eprintln!("an error occurred on stream: {}", err),
 			)

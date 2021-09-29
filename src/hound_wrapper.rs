@@ -17,11 +17,11 @@ impl Iterator for WrapperSamples {
 		match self {
 			WrapperSamples::F32(samples) => samples.next().map(|val| val.unwrap()),
 			WrapperSamples::I32(samples, bps) => {
-				let max = f32::powi(2.0, *bps as i32);
+				let max = f32::powi(2.0, *bps as i32 - 1);
 				samples.next().map(|val| val.unwrap() as f32 / max)
 			}
 			WrapperSamples::I16(samples, bps) => {
-				let max = f32::powi(2.0, *bps as i32);
+				let max = f32::powi(2.0, *bps as i32 - 1);
 				samples.next().map(|val| val.unwrap() as f32 / max)
 			}
 		}
