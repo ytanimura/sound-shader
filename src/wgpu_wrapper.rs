@@ -1,5 +1,5 @@
 use crate::hound_wrapper::WavTextureMaker;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wgpu::{util::DeviceExt, *};
 
 const SHADER_PREFIX: &'static str = "#version 450
@@ -29,7 +29,7 @@ pub struct GPUDirector {
 	bind_group_layouts: Vec<BindGroupLayout>,
 	pipeline: ComputePipeline,
 	base_frame: u32,
-	sound_storages: Vec<WavTextureMaker>,
+	sound_storages: Vec<Arc<Mutex<WavTextureMaker>>>,
 }
 
 impl GPUDirector {
@@ -37,7 +37,7 @@ impl GPUDirector {
 		device: Arc<Device>,
 		queue: Arc<Queue>,
 		shader_source: &str,
-		sound_storages: Vec<WavTextureMaker>,
+		sound_storages: Vec<Arc<Mutex<WavTextureMaker>>>,
 	) -> Self {
 		let bind_group_layouts = create_bind_group_layouts(&device, sound_storages.len());
 		let pipeline = read_source(&device, &bind_group_layouts, shader_source, &sound_storages);
@@ -50,7 +50,10 @@ impl GPUDirector {
 			sound_storages,
 		}
 	}
-	pub fn from_default_device(shader_source: &str, sound_storages: Vec<WavTextureMaker>) -> Self {
+	pub fn from_default_device(
+		shader_source: &str,
+		sound_storages: Vec<Arc<Mutex<WavTextureMaker>>>,
+	) -> Self {
 		let (device, queue) = init_device();
 		Self::new(
 			Arc::new(device),
@@ -89,7 +92,8 @@ impl GPUDirector {
 				},
 			],
 		});
-		let sound_buffers = sound_storage_buffers(device, sound_storages, buffer_length as usize, sample_rate);
+		let sound_buffers =
+			sound_storage_buffers(device, sound_storages, buffer_length as usize / 2, sample_rate);
 		let entries = buffers_to_entries(&sound_buffers);
 		let bind_group1 = device.create_bind_group(&BindGroupDescriptor {
 			label: None,
@@ -177,15 +181,11 @@ pub fn read_source(
 	device: &Device,
 	bind_group_layouts: &[BindGroupLayout],
 	code: &str,
-	resources: &Vec<WavTextureMaker>,
+	resources: &Vec<Arc<Mutex<WavTextureMaker>>>,
 ) -> ComputePipeline {
 	let mut code_buf = SHADER_PREFIX.to_string();
-	resources.iter().enumerate().for_each(|(idx, wav)| {
-		code_buf += &sound_storage_bindingshader(idx, wav.spec.channels as u32)
-	});
-	resources.iter().enumerate().for_each(|(idx, wav)| {
-		code_buf += &sound_storage_fetchfunction(idx, wav.spec.channels as u32)
-	});
+	(0..resources.len()).for_each(|idx| code_buf += &sound_storage_bindingshader(idx));
+	(0..resources.len()).for_each(|idx| code_buf += &sound_storage_fetchfunction(idx));
 	code_buf = code_buf + code + SHADER_SUFFIX;
 	let wgsl = glsl_to_wgsl(&code_buf);
 	let module = device.create_shader_module(&ShaderModuleDescriptor {
@@ -248,10 +248,10 @@ fn create_output_buffers(device: &Device, len: u64) -> (Buffer, Buffer) {
 	(storage, staging)
 }
 
-fn sound_storage_bindingshader(idx: usize, channels: u32) -> String {
+fn sound_storage_bindingshader(idx: usize) -> String {
 	format!(
 		"layout(set = 1, binding = {}) buffer AudioTexture{} {{
-	vec{}[] audio_texture{1};
+	vec4[] audio_texture{1};
 }};
 layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 	uint sample_rate{1};
@@ -261,18 +261,26 @@ layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 	",
 		idx * 2,
 		idx,
-		channels,
 		idx * 2 + 1
 	)
 }
 
-fn sound_storage_fetchfunction(idx: usize, channels: u32) -> String {
-	format!("vec{} soundTexture{}(float time) {{
+fn sound_storage_fetchfunction(idx: usize) -> String {
+	format!(
+		"vec2 soundTexture{}(float time) {{
 	float t = time - float(base_frame) / float(sample_rate);
-	uint idx = uint(float(sample_rate{1}) * t);
-	return audio_texture{1}[idx];
+	uint idx = uint(float(sample_rate{0}) * t);
+	return audio_texture{0}[idx].xy;
 }}
-", channels, idx)
+vec2 soundDFTFetch{0}(float time, uint idx) {{
+	float t = time - float(base_frame) / float(sample_rate);
+	uint base_t = uint(t * 10.0);
+	uint base_idx = sample_rate{0} * base_t / 10;
+	return audio_texture{0}[base_idx + idx].zw;
+}}
+",
+		idx
+	)
 }
 
 fn sound_storage_bind_group_layout_entries(len: u32) -> Vec<BindGroupLayoutEntry> {
@@ -304,22 +312,33 @@ fn sound_storage_bind_group_layout_entries(len: u32) -> Vec<BindGroupLayoutEntry
 		.collect()
 }
 
-fn sound_storage_buffers(device: &Device, storages: &mut Vec<WavTextureMaker>, buffer_length: usize, device_sample_rate: u32) -> Vec<Buffer> {
+fn sound_storage_buffers(
+	device: &Device,
+	storages: &Vec<Arc<Mutex<WavTextureMaker>>>,
+	buffer_length: usize,
+	device_sample_rate: u32,
+) -> Vec<Buffer> {
 	storages
-		.iter_mut()
+		.iter()
 		.flat_map(|storage| {
+			let mut storage = storage.lock().unwrap();
 			let hound::WavSpec {
 				sample_rate,
 				channels,
 				..
-			} = storage.spec;
-			let buffer_length = (buffer_length as f64 * sample_rate as f64 / device_sample_rate as f64) as usize;
+			} = storage.spec();
+			let buffer_length =
+				(buffer_length as f64 * sample_rate as f64 / device_sample_rate as f64) as usize;
+			if storage.buffer_len() < buffer_length {
+				println!("not enough textures!");
+			}
 			let vec = storage.next_buffer(buffer_length);
 			let storage_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
 				label: None,
 				contents: bytemuck::cast_slice(&vec),
 				usage: BufferUsages::STORAGE,
 			});
+			drop(storage);
 			let uniform_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
 				label: None,
 				contents: bytemuck::cast_slice(&[sample_rate, channels as u32]),
