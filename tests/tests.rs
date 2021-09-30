@@ -95,3 +95,39 @@ fn wav_input() {
 			);
 		});
 }
+
+#[test]
+fn decryption() {
+	let record0 = Arc::new(Mutex::new(Vec::new()));
+	let desc0 = ShaderStreamDescriptor {
+		shader_source: "vec2 mainSound(int samp, float time) { return soundTexture0(time); }",
+		sound_storages: &["examples/vocal.wav"],
+		record_buffer: Some(Arc::clone(&record0)),
+		..Default::default()
+	};
+	let record1 = Arc::new(Mutex::new(Vec::new()));
+	let desc1 = ShaderStreamDescriptor {
+		shader_source: include_str!("decryption.comp"),
+		sound_storages: &["examples/vocal.wav"],
+		record_buffer: Some(Arc::clone(&record1)),
+		..Default::default()
+	};
+	sound_shader::play(desc0, Duration::from_secs(10)).unwrap();
+	sound_shader::play(desc1, Duration::from_secs(10)).unwrap();
+
+	record0
+		.lock()
+		.unwrap()
+		.iter()
+		.zip(record1.lock().unwrap().windows(3))
+		.enumerate()
+		.for_each(|(i, (a, b))| {
+			assert!(
+				f32::abs(a - b[0]) < 0.01 || f32::abs(a - b[1]) < 0.01 || f32::abs(a - b[2]) < 0.01,
+				"frame: {}\noriginal: {}\ndecryptions: {:?}",
+				i / 2,
+				a,
+				b
+			);
+		});
+}

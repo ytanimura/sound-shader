@@ -1,0 +1,14 @@
+const float PI = 3.141592563;
+vec2 mainSound(int _samp, float time) {
+	vec2 sum = vec2(0);
+	float t = time - float(base_frame) / float(sample_rate);
+	float idx = floor(float(sample_rate0) * t);
+	for (uint i = 0u; i < 2205u; i++) {
+		vec2 dft = soundDFTFetch0(time, i);
+		float c = cos(2.0 * PI * idx * float(i + uint(time * 0.7)) / 4410.0);
+		float s = sin(2.0 * PI * idx * float(i + uint(time * 0.7)) / 4410.0);
+		sum.x += dft.x * c - dft.y * s;
+		sum.y += dft.y * c + dft.x * s;
+	}
+	return sum / 4410.0;
+}
