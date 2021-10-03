@@ -2,3 +2,4 @@
 Cargo.lock
 *.wav
 result.txt
+result/*

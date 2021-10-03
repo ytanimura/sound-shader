@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::path::Path;
 use std::time::Duration;
 
 mod cpal_wrapper;
@@ -21,6 +22,10 @@ pub enum AudioDevice {
     },
 }
 
+impl Default for AudioDevice {
+    fn default() -> Self { Self::Default }
+}
+
 /// Options for `wgpu` GPU device.
 pub enum GpuDevice {
     /// Loads the default GPU device internally
@@ -34,8 +39,12 @@ pub enum GpuDevice {
     },
 }
 
+impl Default for GpuDevice {
+    fn default() -> Self { Self::Default }
+}
+
 /// Configuation for shader stream
-pub struct ShaderStreamDescriptor<'a, P: AsRef<std::path::Path> = &'static str> {
+pub struct ShaderStreamDescriptor<'a, P: AsRef<Path> = &'static str> {
     /// Options for `cpal` audio device.
     pub audio_device: AudioDevice,
     /// Options for `wgpu` GPU device.
@@ -61,7 +70,7 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 }
 
 /// Creates output audio stream
-pub fn stream(mut desc: ShaderStreamDescriptor) -> cpal::Stream {
+pub fn stream<'a, P: AsRef<Path>>(mut desc: ShaderStreamDescriptor<'a, P>) -> (cpal::Stream, cpal::StreamConfig) {
     let sf = match desc.audio_device {
         AudioDevice::Default => StreamFactory::default_factory().unwrap(),
         AudioDevice::Custum { device, config } => StreamFactory::new(device, config),
@@ -114,7 +123,7 @@ pub fn stream(mut desc: ShaderStreamDescriptor) -> cpal::Stream {
     });
 
     let record = desc.record_buffer.take();
-    sf.create_stream(move |len| match buffer1.lock() {
+    let stream = sf.create_stream(move |len| match buffer1.lock() {
         Err(e) => {
             eprintln!("{}", e);
             vec![0.0; len]
@@ -140,21 +149,22 @@ pub fn stream(mut desc: ShaderStreamDescriptor) -> cpal::Stream {
             front
         }
     })
-    .unwrap()
+    .unwrap();
+    (stream, config)
 }
 
 /// Creates output audio stream and play it for `duration`.
-pub fn play(desc: ShaderStreamDescriptor, duration: Duration) -> Result<(), String> {
+pub fn play<'a, P: AsRef<Path>>(desc: ShaderStreamDescriptor<'a, P>, duration: Duration) -> Result<cpal::StreamConfig, String> {
     use cpal::traits::StreamTrait;
-    let stream = stream(desc);
+    let (stream, config) = stream(desc);
     stream.play().map_err(|e| format!("{}", e))?;
     std::thread::sleep(duration);
-    Ok(())
+    Ok(config)
 }
 
 /// Returns buffer for play the shader. `ShaderStreamDescriptor::audio_device` is ignored.
-pub fn write_buffer(
-    desc: ShaderStreamDescriptor,
+pub fn write_buffer<'a, P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<'a, P>,
     sample_rate: u32,
     duration: Duration,
 ) -> Vec<f32> {
