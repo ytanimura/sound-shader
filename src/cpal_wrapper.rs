@@ -23,7 +23,6 @@ impl StreamFactory {
 		let config = device
 			.default_output_config()
 			.map_err(|e| format!("{}", e))?;
-		println!("Audio Device: {:?}", config);
 		if config.channels() != 2 {
 			return Err(format!(
 				"audio channel must be 2\nchannels: {}",

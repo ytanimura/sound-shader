@@ -115,6 +115,7 @@ fn play<'a, P: AsRef<Path>>(
 	while running.load(Ordering::SeqCst) {
 		std::thread::sleep(std::time::Duration::from_millis(10));
 	}
+	drop(stream);
 	if let Some(record_mutex) = record_buffer {
 		use hound::*;
 		let buffer = record_mutex.lock().unwrap();

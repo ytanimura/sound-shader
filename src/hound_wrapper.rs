@@ -48,7 +48,6 @@ impl WavTextureMaker {
 	pub fn try_new<P: AsRef<Path>>(filename: P) -> Result<Self, String> {
 		let wav = WavReader::open(&filename).map_err(|e| format!("{}", e))?;
 		let spec = wav.spec();
-		println!("{}: {:?}", filename.as_ref().display(), spec);
 		let samples = match spec.sample_format {
 			SampleFormat::Float => WrapperSamples::F32(wav.into_samples()),
 			SampleFormat::Int => {
