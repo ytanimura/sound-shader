@@ -137,6 +137,7 @@ fn init_device() -> (Device, Queue) {
 			.request_adapter(&Default::default())
 			.await
 			.expect("failed to find an appropriate adapter");
+		println!("GPU Device: {:?}", adaptor.get_info());
 		adaptor
 			.request_device(&Default::default(), None)
 			.await

@@ -1,0 +1,7 @@
+{
+  "shader_source": "examples/mix.comp",
+  "resources": [
+    "resources/vanilla-vocal.wav",
+    "resources/vanilla-inst.wav"
+  ]
+}

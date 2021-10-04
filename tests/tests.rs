@@ -58,15 +58,15 @@ fn wav_input() {
     let record = Arc::new(Mutex::new(Vec::new()));
     let desc = ShaderStreamDescriptor {
         audio_device: AudioDevice::Custum { device, config },
-        shader_source: include_str!("../examples/wav-play.comp"),
+        shader_source: include_str!("../examples/mix.comp"),
         record_buffer: Some(Arc::clone(&record)),
-        sound_storages: &["examples/vocal.wav", "examples/inst.wav"],
+        sound_storages: &["resources/vanilla-vocal.wav", "resources/vanilla-inst.wav"],
         ..Default::default()
     };
     sound_shader::play(desc, Duration::from_secs(10)).unwrap();
 
-    let wav0 = WavReader::open("examples/vocal.wav").unwrap();
-    let wav1 = WavReader::open("examples/inst.wav").unwrap();
+    let wav0 = WavReader::open("resources/vanilla-vocal.wav").unwrap();
+    let wav1 = WavReader::open("resources/vanilla-inst.wav").unwrap();
     let record = record.lock().unwrap();
     wav0.into_samples::<i16>()
         .zip(wav1.into_samples::<i32>())
@@ -101,14 +101,14 @@ fn decryption() {
     let record0 = Arc::new(Mutex::new(Vec::new()));
     let desc0 = ShaderStreamDescriptor {
         shader_source: "vec2 mainSound(int samp, float time) { return soundTexture0(time); }",
-        sound_storages: &["examples/vocal.wav"],
+        sound_storages: &["resources/vanilla-vocal.wav"],
         record_buffer: Some(Arc::clone(&record0)),
         ..Default::default()
     };
     let record1 = Arc::new(Mutex::new(Vec::new()));
     let desc1 = ShaderStreamDescriptor {
         shader_source: include_str!("decryption.comp"),
-        sound_storages: &["examples/vocal.wav"],
+        sound_storages: &["resources/vanilla-vocal.wav"],
         record_buffer: Some(Arc::clone(&record1)),
         ..Default::default()
     };

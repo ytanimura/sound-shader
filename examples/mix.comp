@@ -1,0 +1,6 @@
+// Entry point of the sound shader.
+vec2 mainSound(int _samp, float time) {
+	// Simple mixing of two wavs.
+	// soundTexturen retrieves the displacement corresponding to a specified time from the n channel.
+	return soundTexture0(time) + soundTexture1(time);
+}
