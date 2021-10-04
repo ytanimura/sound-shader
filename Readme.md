@@ -1,5 +1,7 @@
 # Simple sound shader player by Rust
 
+[![Crates.io](https://img.shields.io/crates/v/sound-shader.svg)](https://crates.io/crates/sound-shader) [![Docs.rs](https://docs.rs/sound-shader/badge.svg)](https://docs.rs/sound-shader)
+
 A simple CLI application for playing sound GLSL shader by Rust.
 
 ## How to start
