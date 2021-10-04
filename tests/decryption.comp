@@ -1,5 +1,5 @@
 const float PI = 3.141592563;
-vec2 mainSound(int _samp, float time) {
+vec2 mainSound(uint samp, float time) {
 	vec2 sum = vec2(0);
 	float t = time - float(base_frame) / float(sample_rate);
 	float idx = floor(float(sample_rate0) * t);

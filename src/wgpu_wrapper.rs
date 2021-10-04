@@ -19,7 +19,7 @@ const SHADER_SUFFIX: &'static str = "
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
 	uint frame = base_frame + idx;
-	output[idx] = mainSound(int(sample_rate), float(frame) / float(sample_rate));
+	output[idx] = mainSound(idx, float(frame) / float(sample_rate));
 }
 ";
 
@@ -270,7 +270,8 @@ fn sound_storage_fetchfunction(idx: usize) -> String {
 		"vec2 soundTexture{}(float time) {{
 	float t = time - float(base_frame) / float(sample_rate);
 	uint idx = uint(float(sample_rate{0}) * t);
-	return audio_texture{0}[idx].xy;
+	float p = fract(float(sample_rate{0}) * t);
+	return audio_texture{0}[idx].xy * (1.0 - p) + audio_texture{0}[idx + 1].xy * p;
 }}
 vec2 soundDFTFetch{0}(float time, uint idx) {{
 	float t = time - float(base_frame) / float(sample_rate);

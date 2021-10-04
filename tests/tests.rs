@@ -65,33 +65,37 @@ fn wav_input() {
     };
     sound_shader::play(desc, Duration::from_secs(10)).unwrap();
 
-    let wav0 = WavReader::open("resources/vanilla-vocal.wav").unwrap();
-    let wav1 = WavReader::open("resources/vanilla-inst.wav").unwrap();
-    let record = record.lock().unwrap();
-    wav0.into_samples::<i16>()
-        .zip(wav1.into_samples::<i32>())
+    let wav0: Vec<f32> = WavReader::open("resources/vanilla-vocal.wav")
+        .unwrap()
+        .into_samples::<i16>()
+        .take(88500)
+        .map(|a| a.unwrap() as f32 / f32::powi(2.0, 15))
+        .collect();
+    let wav1: Vec<f32> = WavReader::open("resources/vanilla-inst.wav")
+        .unwrap()
+        .into_samples::<i32>()
+        .take(88500)
+        .map(|a| a.unwrap() as f32 / f32::powi(2.0, 31))
+        .collect();
+    record
+        .lock()
+        .unwrap()
+        .iter()
+        .take(88200)
         .enumerate()
-        .take(882000)
-        .for_each(|(i, (a, b))| {
-            let a = a.unwrap() as f32 / f32::powi(2.0, 15);
-            let b = b.unwrap() as f32 / f32::powi(2.0, 23);
-            let rem = i % 2;
-            let quot = (i / 2) as f32 * sample_rate as f32 / 44100.0;
-            let idx = quot as usize * 2 + rem;
-            let c0 = record[usize::clamp(idx, 0, record.len() - 1)];
-            let c1 = record[usize::clamp(idx + 2, 0, record.len() - 1)];
-            let c2 = record[usize::clamp(idx + 4, 0, record.len() - 1)];
+        .for_each(|(i, a)| {
+            let t = (i / 2) as f32 / sample_rate as f32;
+            let idx = (t * 44100.0) as usize;
+            let p = f32::fract(t * 44100.0);
+            let audio0 = wav0[idx] * (1.0 - p) + wav0[idx + 1] * p;
+            let audio1 = wav1[idx] * (1.0 - p) + wav1[idx + 1] * p;
             assert!(
-                f32::abs(a + b - c0) < 0.01
-                    || f32::abs(a + b - c1) < 0.01
-                    || f32::abs(a + b - c2) < 0.01,
-                "frame: {}\nchannel: {}\nanswer: {}\nrecorded: {}, {}, {}",
+                f32::abs(audio0 + audio1 - a) < 0.01,
+                "frame: {}\nchannel: {}\nanswer: {}\nrecorded: {}",
                 i / 2,
                 i % 2,
-                a + b,
-                c0,
-                c1,
-                c2,
+                audio0 + audio1,
+                a,
             );
         });
 }
@@ -100,7 +104,7 @@ fn wav_input() {
 fn decryption() {
     let record0 = Arc::new(Mutex::new(Vec::new()));
     let desc0 = ShaderStreamDescriptor {
-        shader_source: "vec2 mainSound(int samp, float time) { return soundTexture0(time); }",
+        shader_source: "vec2 mainSound(uint samp, float time) { return soundTexture0(time); }",
         sound_storages: &["resources/vanilla-vocal.wav"],
         record_buffer: Some(Arc::clone(&record0)),
         ..Default::default()
