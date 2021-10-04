@@ -1,5 +1,4 @@
 vec2 mainSound(uint samp, float time) {
-	const float PI = 3.141592653;
-	float phase = 2.0 * PI * 440.0 * time;
+	float phase = 6.28318530718 * 440.0 * time;
 	return vec2(cos(phase), sin(phase));
 }

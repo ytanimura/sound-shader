@@ -10,16 +10,16 @@ layout(set = 0, binding = 0) buffer OutputStorage {
 };
 
 layout(set = 0, binding = 1) uniform DeviceInfo {
-	uint sample_rate;
-	uint base_frame;
+	uint iSampleRate;
+	uint iBaseFrame;
 };
 ";
 
 const SHADER_SUFFIX: &'static str = "
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
-	uint frame = base_frame + idx;
-	output[idx] = mainSound(idx, float(frame) / float(sample_rate));
+	uint frame = iBaseFrame + idx;
+	output[idx] = mainSound(idx, float(frame) / float(iSampleRate));
 }
 ";
 
@@ -252,10 +252,10 @@ fn create_output_buffers(device: &Device, len: u64) -> (Buffer, Buffer) {
 fn sound_storage_bindingshader(idx: usize) -> String {
 	format!(
 		"layout(set = 1, binding = {}) buffer AudioTexture{} {{
-	vec4[] audio_texture{1};
+	vec4[] iAudioTexture{1};
 }};
 layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
-	uint sample_rate{1};
+	uint iChannelSampleRate{1};
 	uint channels{1};
 }};
 	",
@@ -268,16 +268,18 @@ layout(set = 1, binding = {}) uniform AudioTextureInfo{1} {{
 fn sound_storage_fetchfunction(idx: usize) -> String {
 	format!(
 		"vec2 soundTexture{}(float time) {{
-	float t = time - float(base_frame) / float(sample_rate);
-	uint idx = uint(float(sample_rate{0}) * t);
-	float p = fract(float(sample_rate{0}) * t);
-	return audio_texture{0}[idx].xy * (1.0 - p) + audio_texture{0}[idx + 1].xy * p;
+	float t = time - float(iBaseFrame) / float(iSampleRate);
+	uint idx = uint(float(iChannelSampleRate{0}) * t);
+	float p = fract(float(iChannelSampleRate{0}) * t);
+	return iAudioTexture{0}[idx].xy * (1.0 - p) + iAudioTexture{0}[idx + 1].xy * p;
 }}
-vec2 soundDFTFetch{0}(float time, uint idx) {{
-	float t = time - float(base_frame) / float(sample_rate);
-	uint base_t = uint(t * 10.0);
-	uint base_idx = sample_rate{0} * base_t / 10;
-	return audio_texture{0}[base_idx + idx].zw;
+vec2 soundTexelFetch{0}(uint idx) {{
+	uint baseIdx = iChannelSampleRate{0} * (iBaseFrame / iSampleRate);
+	return iAudioTexture{0}[idx - baseIdx].xy;
+}}
+vec2 soundDFTFetch{0}(uint idx) {{
+	uint baseIdx = iChannelSampleRate{0} * (iBaseFrame / iSampleRate);
+	return iAudioTexture{0}[idx - baseIdx].zw;
 }}
 ",
 		idx
