@@ -25,7 +25,7 @@ cargo run -- examples/pirates.comp
 
 ```bash
 sound-shader 0.1.0
-
+Yoshinori Tanimura <yotabaito@gmail.com>
 Simple sound shader player
 
 USAGE:
