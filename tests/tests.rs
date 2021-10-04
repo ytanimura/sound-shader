@@ -22,7 +22,7 @@ fn simple_sine() {
     });
     let record = record.lock().unwrap();
     assert!(
-        record.len() >= len * 2,
+        record.len() + sample_rate / 100 >= len * 2,
         "invalid record length:\n record length: {}\nrequired length: {}",
         record.len(),
         len * 2
@@ -55,16 +55,17 @@ fn silent_and_record() {
         shader_source: include_str!("simple-sine.comp"),
         ..Default::default()
     };
-    let buffer = sound_shader::write_buffer(desc, config.sample_rate.0, duration);
+    let sample_rate = config.sample_rate.0 as usize;
+    let buffer = sound_shader::write_buffer(desc, sample_rate as u32, duration);
     let record = record.lock().unwrap();
     assert!(
-        buffer.len() < record.len() + 4000,
+        buffer.len() < record.len() + sample_rate / 100,
         "buffer length mismatch\nrecord: {}\nsilent: {}",
         record.len(),
         buffer.len()
     );
     assert!(
-        record.len() < buffer.len() + 4000,
+        record.len() < buffer.len() + sample_rate / 100,
         "buffer length mismatch\nrecord: {}\nsilent: {}",
         record.len(),
         buffer.len()
