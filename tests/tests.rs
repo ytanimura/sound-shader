@@ -104,14 +104,14 @@ fn wav_input() {
 fn decryption() {
     let record0 = Arc::new(Mutex::new(Vec::new()));
     let desc0 = ShaderStreamDescriptor {
-        shader_source: include_str!("../examples/texel.comp"),
+        shader_source: include_str!("texel.comp"),
         sound_storages: &["resources/this-little-girl.wav"],
         record_buffer: Some(Arc::clone(&record0)),
         ..Default::default()
     };
     let record1 = Arc::new(Mutex::new(Vec::new()));
     let desc1 = ShaderStreamDescriptor {
-        shader_source: include_str!("decryption.comp"),
+        shader_source: include_str!("../examples/decryption.comp"),
         sound_storages: &["resources/this-little-girl.wav"],
         record_buffer: Some(Arc::clone(&record1)),
         ..Default::default()

@@ -1,16 +1,29 @@
 const float PI = 3.141592563;
+
+// Entry point for sound shader
+// Restore the result of DFT provided by sound-shader.
 vec2 mainSound(uint samp, float time) {
-	vec2 sum = vec2(0);
+	// sound-shader supplies the results of the DFT every 0.1 seconds.
 	uint dftSampleRate = iChannelSampleRate0 / 10;
+	// the buffer position in the audio file.
 	uint idx = uint(float(iChannelSampleRate0) * time);
+	// the start position of the DFT result.
 	uint baseIdx = idx - idx % dftSampleRate;
+	
+	// decryption
+	vec2 sum = vec2(0);
 	for (uint i = 0u; i < dftSampleRate; i++) {
+		// the i-th coefficient is "dft.x + i * dft.y".
 		vec2 dft = soundDFTFetch0(baseIdx + i);
+		// calculate wave function
 		float phase = 2.0 * PI * float(idx % dftSampleRate) * float(i) / float(dftSampleRate);
 		float c = cos(phase);
 		float s = sin(phase);
+		// multiplication of complex number
 		sum.x += dft.x * c - dft.y * s;
 		sum.y += dft.y * c + dft.x * s;
 	}
+
+	// the sumation must be divided by DFT sample rate.
 	return sum / float(dftSampleRate);
 }

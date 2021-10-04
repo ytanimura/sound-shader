@@ -1,6 +1,6 @@
 // Entry point of the sound shader.
 // In this shader, the sound source orbits around you!
-vec2 mainSound(int samp, float time) {
+vec2 mainSound(uint samp, float time) {
 	// sound from the sound source
 	float a = sin(6.28318530718 * time * 440.0);
 	// the place of the sound source

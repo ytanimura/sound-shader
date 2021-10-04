@@ -1,0 +1,4 @@
+{
+  "shader_source": "examples/decryption.comp",
+  "resources": ["resources/this-little-girl.wav"]
+}

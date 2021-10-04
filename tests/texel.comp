@@ -1,0 +1,4 @@
+vec2 mainSound(uint samp, float time) {
+	uint idx = uint(float(iChannelSampleRate0) * time);
+	return soundTexelFetch0(idx);
+}
