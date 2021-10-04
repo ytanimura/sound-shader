@@ -18,7 +18,7 @@ cargo run
 There are some examples in `examples`. A very cool sound shader by Inigo Quilez can be played with the following command!
 
 ```bash
-cargo run examples/pirates.comp
+cargo run -- examples/pirates.comp
 ```
 
 ## Help
