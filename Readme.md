@@ -53,7 +53,12 @@ For example, if only a different shader is specified in the other arguments, the
 If no arguments are specified, `default.json` will be loaded, but if other arguments are specified, they will be ignored;
 if you want to use `default.json` as the default setting, you must load it explicitly with `--config`.
 
-## Operating Environment
+## Operating environment
 
 The unit tests and examples are done on my Windows and Mac machines.
 Since this program using both GPU and audio devices, I haven't established a valid CI.
+
+## Future works
+
+- loop back
+- other audio resources: flac, mp3, and so on.
