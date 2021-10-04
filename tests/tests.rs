@@ -70,7 +70,10 @@ fn silent_and_record() {
         record.len(),
         buffer.len()
     );
-    buffer.iter().zip(&*record).for_each(|(a, b)| assert!(f32::abs(a - b) < 0.01));
+    buffer
+        .iter()
+        .zip(&*record)
+        .for_each(|(a, b)| assert!(f32::abs(a - b) < 0.01));
 }
 
 #[test]

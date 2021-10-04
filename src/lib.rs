@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod cpal_wrapper;
@@ -70,7 +70,9 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 }
 
 /// Creates output audio stream
-pub fn stream<'a, P: AsRef<Path>>(mut desc: ShaderStreamDescriptor<'a, P>) -> (cpal::Stream, cpal::StreamConfig) {
+pub fn stream<'a, P: AsRef<Path>>(
+    mut desc: ShaderStreamDescriptor<'a, P>,
+) -> (cpal::Stream, cpal::StreamConfig) {
     let sf = match desc.audio_device {
         AudioDevice::Default => StreamFactory::default_factory().unwrap(),
         AudioDevice::Custum { device, config } => StreamFactory::new(device, config),
@@ -123,38 +125,42 @@ pub fn stream<'a, P: AsRef<Path>>(mut desc: ShaderStreamDescriptor<'a, P>) -> (c
     });
 
     let record = desc.record_buffer.take();
-    let stream = sf.create_stream(move |len| match buffer1.lock() {
-        Err(e) => {
-            eprintln!("{}", e);
-            vec![0.0; len]
-        }
-        Ok(mut buffer) => {
-            if buffer.len() < len {
-                eprintln!(
-                    "buffer length is not enough.\nbuffer length: {}\nrequired: {}",
-                    buffer.len(),
-                    len
-                );
-                buffer.resize(len, 0.0);
+    let stream = sf
+        .create_stream(move |len| match buffer1.lock() {
+            Err(e) => {
+                eprintln!("{}", e);
+                vec![0.0; len]
             }
-            let latter = buffer.split_off(len);
-            let front = buffer.clone();
-            if let Some(record) = record.as_ref() {
-                match record.try_lock() {
-                    Ok(mut record) => record.extend(&front),
-                    Err(_) => eprintln!("record buffer is locked"),
+            Ok(mut buffer) => {
+                if buffer.len() < len {
+                    eprintln!(
+                        "buffer length is not enough.\nbuffer length: {}\nrequired: {}",
+                        buffer.len(),
+                        len
+                    );
+                    buffer.resize(len, 0.0);
                 }
+                let latter = buffer.split_off(len);
+                let front = buffer.clone();
+                if let Some(record) = record.as_ref() {
+                    match record.try_lock() {
+                        Ok(mut record) => record.extend(&front),
+                        Err(_) => eprintln!("record buffer is locked"),
+                    }
+                }
+                *buffer = latter;
+                front
             }
-            *buffer = latter;
-            front
-        }
-    })
-    .unwrap();
+        })
+        .unwrap();
     (stream, config)
 }
 
 /// Creates output audio stream and play it for `duration`.
-pub fn play<'a, P: AsRef<Path>>(desc: ShaderStreamDescriptor<'a, P>, duration: Duration) -> Result<cpal::StreamConfig, String> {
+pub fn play<'a, P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<'a, P>,
+    duration: Duration,
+) -> Result<cpal::StreamConfig, String> {
     use cpal::traits::StreamTrait;
     let (stream, config) = stream(desc);
     stream.play().map_err(|e| format!("{}", e))?;
