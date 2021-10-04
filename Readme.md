@@ -8,7 +8,8 @@ Clone repository, and run
 
 ```bash
 cd sound-shader
-mkdir workspace && cd workspace
+mkdir workspace
+cd workspace
 cargo run -- --init
 cargo run
 ```
