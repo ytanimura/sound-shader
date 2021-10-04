@@ -12,7 +12,6 @@ bytemuck = "1.7.2"
 clap = "2.33.3"
 cpal = "0.13.4"
 ctrlc = "3.2.0"
-env_logger = "0.8"
 hound = "3.4.0"
 naga = { version = "0.6.3", features = ["glsl-in", "wgsl-out"] }
 pollster = "0.2.4"
