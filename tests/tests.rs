@@ -3,42 +3,30 @@ use sound_shader::{AudioDevice, ShaderStreamDescriptor};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-fn default_audio_device() -> (cpal::Device, cpal::SupportedStreamConfig) {
-    use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or("failed to find output device")
-        .unwrap();
-    let config = device
-        .default_output_config()
-        .map_err(|e| format!("{}", e))
-        .unwrap();
-    println!("Output Device: {:?}", config);
-    assert_eq!(config.channels(), 2, "channels must be 2.");
-    (device, config)
-}
-
 #[test]
 fn simple_sine() {
-    let (device, config) = default_audio_device();
-    let sample_rate = config.sample_rate().0 as usize;
     let record = Arc::new(Mutex::new(Vec::new()));
     let desc = ShaderStreamDescriptor {
-        audio_device: AudioDevice::Custum { device, config },
+        audio_device: AudioDevice::Default,
         shader_source: include_str!("simple-sine.comp"),
         record_buffer: Some(Arc::clone(&record)),
         ..Default::default()
     };
-    sound_shader::play(desc, Duration::from_secs(10)).unwrap();
+    let config = sound_shader::play(desc, Duration::from_secs(10)).unwrap();
 
+    let sample_rate = config.sample_rate.0 as usize;
     let len = sample_rate * 10;
     let answer = (0..len).flat_map(|i| {
         let t = 2.0 * std::f32::consts::PI * 440.0 * i as f32 / sample_rate as f32;
         vec![f32::cos(t), f32::sin(t)]
     });
     let record = record.lock().unwrap();
-    assert!(record.len() >= len * 2);
+    assert!(
+        record.len() >= len * 2,
+        "invalid record length:\n record length: {}\nrequired length: {}",
+        record.len(),
+        len * 2
+    );
     answer.zip(&*record).enumerate().for_each(|(i, (a, b))| {
         assert!(
             f32::abs(a - b) < 0.01,
@@ -52,19 +40,51 @@ fn simple_sine() {
 }
 
 #[test]
+fn silent_and_record() {
+    let record = Arc::new(Mutex::new(Vec::new()));
+    let duration = Duration::from_secs_f32(6.28);
+    let desc = ShaderStreamDescriptor {
+        audio_device: AudioDevice::Default,
+        shader_source: include_str!("simple-sine.comp"),
+        record_buffer: Some(Arc::clone(&record)),
+        ..Default::default()
+    };
+    let config = sound_shader::play(desc, duration).unwrap();
+    let desc = ShaderStreamDescriptor {
+        audio_device: AudioDevice::Default,
+        shader_source: include_str!("simple-sine.comp"),
+        ..Default::default()
+    };
+    let buffer = sound_shader::write_buffer(desc, config.sample_rate.0, duration);
+    let record = record.lock().unwrap();
+    assert!(
+        buffer.len() < record.len() + 4000,
+        "buffer length mismatch\nrecord: {}\nsilent: {}",
+        record.len(),
+        buffer.len()
+    );
+    assert!(
+        record.len() < buffer.len() + 4000,
+        "buffer length mismatch\nrecord: {}\nsilent: {}",
+        record.len(),
+        buffer.len()
+    );
+    buffer.iter().zip(&*record).for_each(|(a, b)| assert!(f32::abs(a - b) < 0.01));
+}
+
+#[test]
 fn wav_input() {
-    let (device, config) = default_audio_device();
-    let sample_rate = config.sample_rate().0;
     let record = Arc::new(Mutex::new(Vec::new()));
     let desc = ShaderStreamDescriptor {
-        audio_device: AudioDevice::Custum { device, config },
+        audio_device: AudioDevice::Default,
         shader_source: include_str!("../examples/mix.comp"),
         record_buffer: Some(Arc::clone(&record)),
         sound_storages: &["resources/vanilla-vocal.wav", "resources/vanilla-inst.wav"],
         ..Default::default()
     };
-    sound_shader::play(desc, Duration::from_secs(10)).unwrap();
+    let config = sound_shader::play(desc, Duration::from_secs(10)).unwrap();
 
+    let sample_rate = config.sample_rate.0;
     let wav0: Vec<f32> = WavReader::open("resources/vanilla-vocal.wav")
         .unwrap()
         .into_samples::<i16>()
