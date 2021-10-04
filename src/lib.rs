@@ -70,17 +70,23 @@ impl<'a> Default for ShaderStreamDescriptor<'a> {
 }
 
 /// Creates output audio stream
-pub fn stream<'a, P: AsRef<Path>>(
-    mut desc: ShaderStreamDescriptor<'a, P>,
+pub fn stream<P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<P>,
 ) -> (cpal::Stream, cpal::StreamConfig) {
-    let sf = match desc.audio_device {
+    let ShaderStreamDescriptor {
+        audio_device,
+        gpu_device,
+        shader_source,
+        sound_storages,
+        mut record_buffer,
+    } = desc;
+    let sf = match audio_device {
         AudioDevice::Default => StreamFactory::default_factory().unwrap(),
         AudioDevice::Custum { device, config } => StreamFactory::new(device, config),
     };
     let config = sf.config();
-    let sound_storages = desc
-        .sound_storages
-        .into_iter()
+    let sound_storages = sound_storages
+        .iter()
         .map(|path| {
             let mut maker = WavTextureMaker::try_new(path).unwrap();
             let spec = maker.spec();
@@ -89,10 +95,10 @@ pub fn stream<'a, P: AsRef<Path>>(
         })
         .collect::<Vec<_>>();
     let sound_storages0 = sound_storages.clone();
-    let mut director = match desc.gpu_device {
-        GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
+    let mut director = match gpu_device {
+        GpuDevice::Default => GPUDirector::from_default_device(shader_source, sound_storages),
         GpuDevice::Custum { device, queue } => {
-            GPUDirector::new(device, queue, desc.shader_source, sound_storages)
+            GPUDirector::new(device, queue, shader_source, sound_storages)
         }
     };
 
@@ -124,7 +130,7 @@ pub fn stream<'a, P: AsRef<Path>>(
         std::thread::sleep(Duration::from_millis(200));
     });
 
-    let record = desc.record_buffer.take();
+    let record = record_buffer.take();
     let stream = sf
         .create_stream(move |len| match buffer1.lock() {
             Err(e) => {
@@ -157,8 +163,8 @@ pub fn stream<'a, P: AsRef<Path>>(
 }
 
 /// Creates output audio stream and play it for `duration`.
-pub fn play<'a, P: AsRef<Path>>(
-    desc: ShaderStreamDescriptor<'a, P>,
+pub fn play<P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<P>,
     duration: Duration,
 ) -> Result<cpal::StreamConfig, String> {
     use cpal::traits::StreamTrait;
@@ -168,15 +174,20 @@ pub fn play<'a, P: AsRef<Path>>(
     Ok(config)
 }
 
-/// Returns buffer for play the shader. `ShaderStreamDescriptor::audio_device` is ignored.
-pub fn write_buffer<'a, P: AsRef<Path>>(
-    desc: ShaderStreamDescriptor<'a, P>,
+/// Returns buffer for play the shader. `audio_device` and `record_buffer` are ignored.
+pub fn write_buffer<P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<P>,
     sample_rate: u32,
     duration: Duration,
 ) -> Vec<f32> {
-    let sound_storages = desc
-        .sound_storages
-        .into_iter()
+    let ShaderStreamDescriptor {
+        gpu_device,
+        shader_source,
+        sound_storages,
+        ..
+    } = desc;
+    let sound_storages = sound_storages
+        .iter()
         .map(|path| {
             let mut wav = WavTextureMaker::try_new(path).unwrap();
             let spec = wav.spec();
@@ -187,10 +198,10 @@ pub fn write_buffer<'a, P: AsRef<Path>>(
             Arc::new(Mutex::new(wav))
         })
         .collect();
-    let mut director = match desc.gpu_device {
-        GpuDevice::Default => GPUDirector::from_default_device(desc.shader_source, sound_storages),
+    let mut director = match gpu_device {
+        GpuDevice::Default => GPUDirector::from_default_device(shader_source, sound_storages),
         GpuDevice::Custum { device, queue } => {
-            GPUDirector::new(device, queue, desc.shader_source, sound_storages)
+            GPUDirector::new(device, queue, shader_source, sound_storages)
         }
     };
     let time = duration.as_secs_f64();

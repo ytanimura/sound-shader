@@ -2,7 +2,7 @@ use crate::hound_wrapper::WavTextureMaker;
 use std::sync::{Arc, Mutex};
 use wgpu::{util::DeviceExt, *};
 
-const SHADER_PREFIX: &'static str = "#version 450
+const SHADER_PREFIX: &str = "#version 450
 layout(local_size_x = 1) in;
 
 layout(set = 0, binding = 0) buffer OutputStorage {
@@ -15,7 +15,7 @@ layout(set = 0, binding = 1) uniform DeviceInfo {
 };
 ";
 
-const SHADER_SUFFIX: &'static str = "
+const SHADER_SUFFIX: &str = "
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
 	uint frame = iBaseFrame + idx;
@@ -181,7 +181,7 @@ pub fn read_source(
 	device: &Device,
 	bind_group_layouts: &[BindGroupLayout],
 	code: &str,
-	resources: &Vec<Arc<Mutex<WavTextureMaker>>>,
+	resources: &[Arc<Mutex<WavTextureMaker>>],
 ) -> ComputePipeline {
 	let mut code_buf = SHADER_PREFIX.to_string();
 	(0..resources.len()).for_each(|idx| code_buf += &sound_storage_bindingshader(idx));
@@ -212,7 +212,7 @@ fn glsl_to_wgsl(code: &str) -> String {
 				stage: naga::ShaderStage::Compute,
 				defines: Default::default(),
 			},
-			&code,
+			code,
 		)
 		.unwrap_or_else(|e| panic!("GLSL Parse Error: {:?}", e));
 	let glsl_module_info = naga::valid::Validator::new(
@@ -316,7 +316,7 @@ fn sound_storage_bind_group_layout_entries(len: u32) -> Vec<BindGroupLayoutEntry
 
 fn sound_storage_buffers(
 	device: &Device,
-	storages: &Vec<Arc<Mutex<WavTextureMaker>>>,
+	storages: &[Arc<Mutex<WavTextureMaker>>],
 	buffer_length: usize,
 	device_sample_rate: u32,
 ) -> Vec<Buffer> {
@@ -351,7 +351,7 @@ fn sound_storage_buffers(
 		.collect()
 }
 
-fn buffers_to_entries(buffers: &Vec<Buffer>) -> Vec<BindGroupEntry> {
+fn buffers_to_entries(buffers: &[Buffer]) -> Vec<BindGroupEntry> {
 	buffers
 		.iter()
 		.enumerate()

@@ -42,24 +42,24 @@ fn parse_args() -> Option<PlayConfig<String>> {
         return None;
     }
     let mut config = if let Some(config) = matches.value_of("config") {
-        let file = File::open(config).expect(&format!("not found: {}", config));
-        serde_json::from_reader(file).expect(&format!("json parse error: {}", config))
+        let file = File::open(config).unwrap_or_else(|_| panic!("not found: {}", config));
+        serde_json::from_reader(file).unwrap_or_else(|_| panic!("json parse error: {}", config))
     } else {
         PlayConfig::default()
     };
-    matches
-        .value_of("FILE")
-        .map(|filename| config.shader_source = filename.to_string());
-    matches
-        .values_of("resources")
-        .map(|r| config.resources = r.map(ToString::to_string).collect());
-    matches
-        .value_of("output")
-        .map(|output| config.output = Some(output.to_string()));
-    matches.value_of("silent").map(|second| {
-        let seconds: f32 = second.parse().expect("could not parse duration");
+    if let Some(filename) = matches.value_of("FILE") {
+        config.shader_source = filename.to_string();
+    }
+    if let Some(r) = matches.values_of("resources") {
+        config.resources = r.map(ToString::to_string).collect()
+    }
+    if let Some(output) = matches.value_of("output") {
+        config.output = Some(output.to_string());
+    }
+    if let Some(seconds) = matches.value_of("silent") {
+        let seconds: f32 = seconds.parse().expect("could not parse duration");
         config.silent = Some(seconds);
-    });
+    }
     if config == PlayConfig::default() {
         let file = File::open("default.json").expect("not found: default.json");
         config = serde_json::from_reader(file).expect("json perse error: default.json");
@@ -82,7 +82,7 @@ fn init() {
     .unwrap();
 }
 
-fn silent<'a, P: AsRef<Path>>(desc: ShaderStreamDescriptor<'a, P>, filename: P, seconds: f32) {
+fn silent<P: AsRef<Path>>(desc: ShaderStreamDescriptor<P>, filename: P, seconds: f32) {
     use hound::*;
     let buffer =
         sound_shader::write_buffer(desc, 44100, std::time::Duration::from_secs_f32(seconds));
@@ -99,8 +99,8 @@ fn silent<'a, P: AsRef<Path>>(desc: ShaderStreamDescriptor<'a, P>, filename: P, 
     writer.finalize().unwrap()
 }
 
-fn play<'a, P: AsRef<Path>>(
-    desc: ShaderStreamDescriptor<'a, P>,
+fn play<P: AsRef<Path>>(
+    desc: ShaderStreamDescriptor<P>,
     record_buffer: Option<Arc<Mutex<Vec<f32>>>>,
     output: Option<P>,
 ) {
@@ -126,10 +126,12 @@ fn play<'a, P: AsRef<Path>>(
             bits_per_sample: 32,
             sample_format: SampleFormat::Float,
         };
-        let mut writer = WavWriter::create(&filename, spec).expect(&format!(
-            "failed to create output file: {}",
-            filename.as_ref().display()
-        ));
+        let mut writer = WavWriter::create(&filename, spec).unwrap_or_else(|_| {
+            panic!(
+                "failed to create output file: {}",
+                filename.as_ref().display()
+            )
+        });
         buffer.iter().for_each(|s| writer.write_sample(*s).unwrap());
         writer.finalize().unwrap();
     }
@@ -144,7 +146,7 @@ fn main() {
         }
     };
     let shader_source = std::fs::read_to_string(&config.shader_source)
-        .expect(&format!("not found: {}", config.shader_source));
+        .unwrap_or_else(|_| panic!("not found: {}", config.shader_source));
     let record_buffer = config
         .output
         .as_ref()

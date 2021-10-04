@@ -81,10 +81,7 @@ impl WavTextureMaker {
 			spec,
 			fft_buffer,
 		} = self;
-		buffer.extend((0..len).map(|_| match samples.next() {
-			Some(val) => val,
-			None => 0.0,
-		}));
+		buffer.extend((0..len).map(|_| samples.next().unwrap_or(0.0)));
 		let unit_len = spec.sample_rate as usize / 10;
 		let delta = buffer.len() / spec.channels as usize - fft_buffer.len();
 		if delta > unit_len {

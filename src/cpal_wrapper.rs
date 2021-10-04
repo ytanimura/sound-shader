@@ -41,12 +41,11 @@ impl StreamFactory {
 			SampleFormat::I16 => self.sub_get_stream::<i16, _>(routin),
 			SampleFormat::U16 => self.sub_get_stream::<u16, _>(routin),
 		}
-		.map_err(|e| format!("{}", e))
 	}
 	fn sub_get_stream<T: Sample, F: FnMut(usize) -> Vec<f32> + Send + 'static>(
 		&self,
 		mut routin: F,
-	) -> Result<cpal::Stream, String> {
+	) -> Result<Stream, String> {
 		self.device
 			.build_output_stream(
 				&self.config.clone().into(),
