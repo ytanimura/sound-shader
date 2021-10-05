@@ -63,6 +63,8 @@ Specifically, the following files are distributed on a non-commercial basis.
 - `resources/*.wav`
 - `examples/pirates.comp`
 
+These files are excluded by Cargo.toml. So, there are no problems if one uses this crate from [crates.io](https://crates.io/crates/sound-shader).
+
 ## Operating environment
 
 The unit tests and examples are done on my Windows and Mac machines.
