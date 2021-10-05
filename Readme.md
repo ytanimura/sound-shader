@@ -21,6 +21,7 @@ cargo run
 There are some examples in `examples`. A very cool sound shader by Inigo Quilez can be played with the following command!
 
 ```bash
+git submodule update --init
 cargo run -- resources/pirates.comp
 ```
 
