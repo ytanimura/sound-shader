@@ -21,13 +21,13 @@ cargo run
 There are some examples in `examples`. A very cool sound shader by Inigo Quilez can be played with the following command!
 
 ```bash
-cargo run -- examples/pirates.comp
+cargo run -- resources/pirates.comp
 ```
 
 ## Help
 
 ```bash
-sound-shader 0.1.0
+sound-shader 0.1.1
 Yoshinori Tanimura <yotabaito@gmail.com>
 Simple sound shader player
 
@@ -57,13 +57,10 @@ if you want to use `default.json` as the default setting, you must load it expli
 
 ## License
 
-This crate is distributed under Apach-2.0. However, this repository contains some resources that are distributed on a non-commercial basis only.
-Specifically, the following files are distributed on a non-commercial basis.
+This crate is distributed under Apach-2.0.
 
-- `resources/*.wav`
-- `examples/pirates.comp`
-
-These files are excluded by Cargo.toml. So, there are no problems if one uses this crate from [crates.io](https://crates.io/crates/sound-shader).
+Submodules loaded from external repositories contain non-commercially licensed resources,
+but they are for testing and are not loaded into the source code by macros.
 
 ## Operating environment
 

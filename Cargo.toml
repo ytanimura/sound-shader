@@ -9,7 +9,7 @@ repogitory = "https://github.com/ytanimura/sound-shader"
 license = "Apache-2.0"
 keywords = ["GLSL", "GPU", "audio"]
 categories = ["multimedia"]
-exclude = ["resources/*", "examples/pirates.comp"]
+exclude = ["resources/*"]
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
