@@ -53,6 +53,14 @@ For example, if only a different shader is specified in the other arguments, the
 If no arguments are specified, `default.json` will be loaded, but if other arguments are specified, they will be ignored;
 if you want to use `default.json` as the default setting, you must load it explicitly with `--config`.
 
+## License
+
+This crate is distributed under Apach-2.0. However, this repository contains some resources that are distributed on a non-commercial basis only.
+Specifically, the following files are distributed on a non-commercial basis.
+
+- `resources/*.wav`
+- `examples/pirates.comp`
+
 ## Operating environment
 
 The unit tests and examples are done on my Windows and Mac machines.

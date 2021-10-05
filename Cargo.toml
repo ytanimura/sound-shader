@@ -1,6 +1,6 @@
 [package]
 name = "sound-shader"
-version = "0.1.1-alpha.0"
+version = "0.1.1"
 authors = ["Yoshinori Tanimura <yotabaito@gmail.com>"]
 edition = "2018"
 description = "Simple sound shader player"
@@ -9,7 +9,7 @@ repogitory = "https://github.com/ytanimura/sound-shader"
 license = "Apache-2.0"
 keywords = ["GLSL", "GPU", "audio"]
 categories = ["multimedia"]
-exclude = ["resources/*"]
+exclude = ["resources/*", "examples/pirates.comp"]
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
